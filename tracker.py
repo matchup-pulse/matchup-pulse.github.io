@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 LEAGUE_ID = os.environ["LEAGUE_ID"]
 TEAM_ID = int(os.environ["TEAM_ID"])
@@ -47,7 +48,6 @@ def main():
         opp_proj = opp.get("totalProjectedPointsLive", opp_live)
         win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
 
-        # Log timestamp in HKT (UTC+8)
         now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
         file_exists = os.path.isfile(CSV_FILE)
         with open(CSV_FILE, "a", newline="") as f:
@@ -64,15 +64,17 @@ def main():
         wk = df[df["week"] == latest_week].copy()
         wk["timestamp"] = pd.to_datetime(wk["timestamp"])
 
-        plt.figure(figsize=(10, 4.5))
-        plt.plot(wk["timestamp"], wk["win_pct"], linewidth=2.5, color="#1f77b4", marker="o", markersize=3)
-        plt.axhline(50, color="gray", linestyle="--", alpha=0.6)
-        plt.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] >= 50), color="#2ca02c", alpha=0.15)
-        plt.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] < 50), color="#d62728", alpha=0.15)
-        plt.ylim(0, 100)
-        plt.ylabel("Win Probability (%)")
-        plt.title(f"Week {latest_week} Matchup Win Probability (Latest: {wk['win_pct'].iloc[-1]}% | Score: {wk['my_live'].iloc[-1]}-{wk['opp_live'].iloc[-1]})")
-        plt.grid(True, alpha=0.3)
+        fig, ax = plt.subplots(figsize=(10, 4.5))
+        ax.plot(wk["timestamp"], wk["win_pct"], linewidth=2.5, color="#1f77b4", marker="o", markersize=4)
+        ax.axhline(50, color="gray", linestyle="--", alpha=0.6)
+        ax.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] >= 50), color="#2ca02c", alpha=0.15)
+        ax.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] < 50), color="#d62728", alpha=0.15)
+
+        ax.set_ylim(0, 100)
+        ax.set_ylabel("Win Probability (%)")
+        ax.set_title(f"Week {latest_week} Matchup Win Probability (Latest: {wk['win_pct'].iloc[-1]}% | Score: {wk['my_live'].iloc[-1]}-{wk['opp_live'].iloc[-1]})")
+        ax.grid(True, alpha=0.3)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %H:%M"))
         plt.xticks(rotation=25)
         plt.tight_layout()
         plt.savefig(CHART_FILE, dpi=150)
