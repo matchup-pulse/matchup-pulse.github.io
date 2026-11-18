@@ -16,8 +16,21 @@ CSV_FILE = "win_prob_log.csv"
 CHART_FILE = "win_prob_chart.png"
 
 URL = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{SEASON_ID}/segments/0/leagues/{LEAGUE_ID}"
+SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 PARAMS = {"view": ["mMatchupScore", "mScoreboard"]}
 COOKIES = {"SWID": SWID, "espn_s2": ESPN_S2} if SWID else {}
+
+def games_are_live():
+    """Returns True if at least one NFL game is currently in progress."""
+    try:
+        sb = requests.get(SCOREBOARD_URL, timeout=15).json()
+        for event in sb.get("events", []):
+            state = event.get("status", {}).get("type", {}).get("state", "")
+            if state == "in":  # "in" = game currently in progress
+                return True
+    except Exception:
+        return True  # Fallback: allow logging if scoreboard check fails
+    return False
 
 def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     my_rem = max(0.0, my_proj - my_live)
@@ -27,6 +40,8 @@ def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     return round(0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0))) * 100, 1)
 
 def main():
+    is_manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+
     resp = requests.get(URL, params=PARAMS, cookies=COOKIES, timeout=20)
     resp.raise_for_status()
     data = resp.json()
@@ -42,11 +57,28 @@ def main():
         me = home if home.get("teamId") == TEAM_ID else away
         opp = away if me is home else home
 
-        my_live = me.get("totalPointsLive", me.get("totalPoints", 0.0))
-        opp_live = opp.get("totalPointsLive", opp.get("totalPoints", 0.0))
-        my_proj = me.get("totalProjectedPointsLive", my_live)
-        opp_proj = opp.get("totalProjectedPointsLive", opp_live)
+        my_live = round(me.get("totalPointsLive", me.get("totalPoints", 0.0)), 2)
+        opp_live = round(opp.get("totalPointsLive", opp.get("totalPoints", 0.0)), 2)
+        my_proj = round(me.get("totalProjectedPointsLive", my_live), 2)
+        opp_proj = round(opp.get("totalProjectedPointsLive", opp_live), 2)
         win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
+
+        # Check if we already logged this exact score/win% or if no games are live
+        live_now = games_are_live()
+        already_logged_same = False
+        if os.path.isfile(CSV_FILE):
+            existing = pd.read_csv(CSV_FILE)
+            wk_existing = existing[existing["week"] == current_week]
+            if not wk_existing.empty:
+                last = wk_existing.iloc[-1]
+                if (last["my_live"] == my_live and last["opp_live"] == opp_live
+                        and last["win_pct"] == win_pct):
+                    already_logged_same = True
+
+        # Skip logging if no games are live AND we already captured the latest final score
+        if not is_manual and not live_now and already_logged_same:
+            print("No live NFL games and no score change. Skipping log.")
+            return
 
         now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
         file_exists = os.path.isfile(CSV_FILE)
@@ -54,8 +86,7 @@ def main():
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(["timestamp", "week", "my_live", "opp_live", "my_proj", "opp_proj", "win_pct"])
-            writer.writerow([now, current_week, round(my_live, 2), round(opp_live, 2),
-                             round(my_proj, 2), round(opp_proj, 2), win_pct])
+            writer.writerow([now, current_week, my_live, opp_live, my_proj, opp_proj, win_pct])
         break
 
     if os.path.isfile(CSV_FILE):
