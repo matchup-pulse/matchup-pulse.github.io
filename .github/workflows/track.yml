@@ -1,11 +1,17 @@
 name: Track ESPN Win Probability
 
 on:
-  workflow_dispatch: # Lets you click a button to test it anytime
+  workflow_dispatch:
   schedule:
-    # Runs every 15 mins during NFL game windows (converted to UTC)
-    - cron: '*/15 0-5 * * 1,2,5'
-    - cron: '*/15 17-23 * * 0'
+    # Every 10 mins during live NFL game windows (UTC)
+    # Sun early/late/SNF (1:00 PM - 11:59 PM ET -> 18:00 - 04:50 UTC)
+    - cron: '*/10 18-23 * * 0'
+    - cron: '*/10 0-4 * * 1'
+    # Mon MNF & Thu TNF (8:15 PM - 11:59 PM ET -> 01:10 - 04:50 UTC Tue & Fri)
+    - cron: '*/10 1-4 * * 2,5'
+    # Thanksgiving / Black Friday / Holiday games (Wed/Thu/Fri/Sat afternoon-night ET)
+    - cron: '*/10 18-23 * * 4,5,6'
+    - cron: '*/10 1-4 * * 4,6,0'
 
 permissions:
   contents: write
