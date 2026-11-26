@@ -1,28 +1,26 @@
 import csv
+import json
 import math
 import os
 from datetime import datetime, timezone, timedelta
 import requests
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
-LEAGUE_ID = os.environ["LEAGUE_ID"]
-TEAM_ID = int(os.environ["TEAM_ID"])
-SWID = os.environ.get("SWID", "")
-ESPN_S2 = os.environ.get("ESPN_S2", "")
-SEASON_ID = 2026
-CSV_FILE = "win_prob_log.csv"
-CHART_FILE = "win_prob_chart.png"
+TEAMS_FILE = "teams.json"
+DEFAULT_SEASON = 2026
 
-URL = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{SEASON_ID}/segments/0/leagues/{LEAGUE_ID}"
-SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-PARAMS = {"view": ["mMatchupScore", "mScoreboard", "mBoxscore"]}
-COOKIES = {"SWID": SWID, "espn_s2": ESPN_S2} if SWID else {}
+SPORT_CONFIG = {
+    "ffl": {"name": "Football", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"},
+    "fba": {"name": "Basketball", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"},
+    "fhl": {"name": "Hockey", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"},
+    "flb": {"name": "Baseball", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"},
+}
 
-def games_are_live():
+def sport_is_live(sport):
+    url = SPORT_CONFIG.get(sport, {}).get("scoreboard")
+    if not url:
+        return True
     try:
-        sb = requests.get(SCOREBOARD_URL, timeout=15).json()
+        sb = requests.get(url, timeout=15).json()
         for event in sb.get("events", []):
             if event.get("status", {}).get("type", {}).get("state", "") == "in":
                 return True
@@ -35,27 +33,41 @@ def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     opp_rem = max(0.0, opp_proj - opp_live)
     if my_rem == 0 and opp_rem == 0:
         return 100.0 if my_live > opp_live else (0.0 if my_live < opp_live else 50.0)
-    # Calibrated to match ESPN's wider fantasy player standard deviation
     combined_std = max(2.5, math.sqrt((my_rem + opp_rem) * 5.2))
     z_score = (my_proj - opp_proj) / combined_std
     return round(0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0))) * 100, 1)
 
-def main():
-    is_manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+def poll_team(team, is_manual):
+    sport = team.get("sport", "ffl")
+    league_id = str(team.get("leagueId") or os.environ.get("LEAGUE_ID", ""))
+    team_id = int(team.get("teamId") or os.environ.get("TEAM_ID", 1))
+    season_id = int(team.get("seasonId", DEFAULT_SEASON))
+    csv_file = team.get("csvFile") or f"logs/{sport}_{league_id}_{team_id}.csv"
 
-    resp = requests.get(URL, params=PARAMS, cookies=COOKIES, timeout=20)
-    resp.raise_for_status()
+    if not league_id:
+        return
+
+    os.makedirs(os.path.dirname(csv_file) or ".", exist_ok=True)
+    url = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/{sport}/seasons/{season_id}/segments/0/leagues/{league_id}"
+    cookies = {}
+    if team.get("id") == "primary" and os.environ.get("SWID"):
+        cookies = {"SWID": os.environ["SWID"], "espn_s2": os.environ.get("ESPN_S2", "")}
+
+    resp = requests.get(url, params={"view": ["mMatchupScore", "mScoreboard", "mBoxscore"]}, cookies=cookies, timeout=20)
+    if resp.status_code != 200:
+        print(f"Skipping {team.get('name')} ({resp.status_code})")
+        return
     data = resp.json()
 
-    current_week = data["scoringPeriodId"]
+    current_week = data.get("scoringPeriodId")
     for matchup in data.get("schedule", []):
         if matchup.get("matchupPeriodId") != current_week:
             continue
         home, away = matchup.get("home", {}), matchup.get("away", {})
-        if TEAM_ID not in (home.get("teamId"), away.get("teamId")):
+        if team_id not in (home.get("teamId"), away.get("teamId")):
             continue
 
-        me = home if home.get("teamId") == TEAM_ID else away
+        me = home if home.get("teamId") == team_id else away
         opp = away if me is home else home
 
         my_live = round(me.get("totalPointsLive", me.get("totalPoints", 0.0)), 2)
@@ -63,57 +75,46 @@ def main():
         my_proj = round(me.get("totalProjectedPointsLive", my_live), 2)
         opp_proj = round(opp.get("totalProjectedPointsLive", opp_live), 2)
 
-        # 1. Try ESPN's native winProbability field first (stored as 0.0 - 1.0 or 0 - 100)
         espn_wp = me.get("winProbability")
         if espn_wp is not None:
             win_pct = round(espn_wp * 100 if espn_wp <= 1.0 else espn_wp, 1)
         else:
             win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
 
-        live_now = games_are_live()
+        live_now = sport_is_live(sport)
         already_logged_same = False
-        if os.path.isfile(CSV_FILE):
-            existing = pd.read_csv(CSV_FILE)
-            wk_existing = existing[existing["week"] == current_week]
-            if not wk_existing.empty:
-                last = wk_existing.iloc[-1]
-                if (last["my_live"] == my_live and last["opp_live"] == opp_live
-                        and last["win_pct"] == win_pct):
-                    already_logged_same = True
+        if os.path.isfile(csv_file):
+            with open(csv_file, "r") as f:
+                rows = list(csv.reader(f))
+                wk_rows = [r for r in rows[1:] if len(r) >= 7 and int(r[1]) == current_week]
+                if wk_rows:
+                    last = wk_rows[-1]
+                    if float(last[2]) == my_live and float(last[3]) == opp_live and float(last[6]) == win_pct:
+                        already_logged_same = True
 
         if not is_manual and not live_now and already_logged_same:
-            print("No live NFL games and no score change. Skipping log.")
-            return
+            continue
 
         now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
-        file_exists = os.path.isfile(CSV_FILE)
-        with open(CSV_FILE, "a", newline="") as f:
+        file_exists = os.path.isfile(csv_file)
+        with open(csv_file, "a", newline="") as f:
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(["timestamp", "week", "my_live", "opp_live", "my_proj", "opp_proj", "win_pct"])
             writer.writerow([now, current_week, my_live, opp_live, my_proj, opp_proj, win_pct])
         break
 
-    if os.path.isfile(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-        latest_week = df["week"].iloc[-1]
-        wk = df[df["week"] == latest_week].copy()
-        wk["timestamp"] = pd.to_datetime(wk["timestamp"])
+def main():
+    is_manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
+    teams = []
+    if os.path.isfile(TEAMS_FILE):
+        with open(TEAMS_FILE, "r") as f:
+            teams = json.load(f)
+    if not teams:
+        teams = [{"id": "primary", "name": "My Team", "sport": "ffl", "csvFile": "win_prob_log.csv"}]
 
-        fig, ax = plt.subplots(figsize=(10, 4.5))
-        ax.plot(wk["timestamp"], wk["win_pct"], linewidth=2.5, color="#1f77b4", marker="o", markersize=4)
-        ax.axhline(50, color="gray", linestyle="--", alpha=0.6)
-        ax.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] >= 50), color="#2ca02c", alpha=0.15)
-        ax.fill_between(wk["timestamp"], wk["win_pct"], 50, where=(wk["win_pct"] < 50), color="#d62728", alpha=0.15)
-
-        ax.set_ylim(0, 100)
-        ax.set_ylabel("Win Probability (%)")
-        ax.set_title(f"Week {latest_week} Matchup Win Probability (Latest: {wk['win_pct'].iloc[-1]}% | Score: {wk['my_live'].iloc[-1]}-{wk['opp_live'].iloc[-1]})")
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%a %H:%M"))
-        plt.xticks(rotation=25)
-        plt.tight_layout()
-        plt.savefig(CHART_FILE, dpi=150)
+    for team in teams:
+        poll_team(team, is_manual)
 
 if __name__ == "__main__":
     main()
