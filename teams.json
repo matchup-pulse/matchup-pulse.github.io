@@ -1,0 +1,11 @@
+[
+  {
+    "id": "primary",
+    "name": "My Fantasy Team",
+    "sport": "ffl",
+    "leagueId": "YOUR_LEAGUE_ID",
+    "teamId": 1,
+    "seasonId": 2026,
+    "csvFile": "win_prob_log.csv"
+  }
+]
