@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>ESPN Win% Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; padding: 16px; background: #0f172a; color: #f8fafc; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    h1 { font-size: 1.15rem; margin: 0; }
+    select { background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 6px 10px; border-radius: 8px; font-size: 0.95rem; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+    .card { background: #1e293b; padding: 10px; border-radius: 10px; text-align: center; }
+    .label { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+    .val { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+    .win-high { color: #4ade80; }
+    .win-low { color: #f87171; }
+    .chart-box { background: #1e293b; padding: 12px; border-radius: 12px; height: 320px; }
+    .meta { margin-top: 10px; font-size: 0.78rem; color: #64748b; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🏈 Win% Tracker</h1>
+    <select id="weekSelect"></select>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Win Prob</div><div class="val" id="winVal">--%</div></div>
+    <div class="card"><div class="label">My Score</div><div class="val" id="myVal">--</div></div>
+    <div class="card"><div class="label">Opp Score</div><div class="val" id="oppVal">--</div></div>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="winChart"></canvas>
+  </div>
+  <div class="meta" id="lastUpdated">Loading data...</div>
+
+  <script>
+    const CSV_URL = "https://raw.githubusercontent.com/whi1201/espn-win-tracker/refs/heads/main/win_prob_log.csv";
+    let allRows = [];
+    let chartInstance = null;
+
+    async function loadData() {
+      const res = await fetch(CSV_URL + "?t=" + Date.now());
+      const text = await res.text();
+      const lines = text.trim().split("\n").slice(1);
+      allRows = lines.map(line => {
+        const [timestamp, week, my_live, opp_live, my_proj, opp_proj, win_pct] = line.split(",");
+        return {
+          timestamp,
+          week: Number(week),
+          my_live: Number(my_live),
+          opp_live: Number(opp_live),
+          my_proj: Number(my_proj),
+          opp_proj: Number(opp_proj),
+          win_pct: Number(win_pct)
+        };
+      }).filter(r => !isNaN(r.week));
+
+      const weeks = [...new Set(allRows.map(r => r.week))].sort((a, b) => b - a);
+      const select = document.getElementById("weekSelect");
+      select.innerHTML = weeks.map(w => `<option value="${w}">Week ${w}</option>`).join("");
+      select.onchange = () => renderWeek(Number(select.value));
+
+      if (weeks.length > 0) renderWeek(weeks[0]);
+    }
+
+    function renderWeek(weekNum) {
+      const rows = allRows.filter(r => r.week === weekNum);
+      if (!rows.length) return;
+
+      const latest = rows[rows.length - 1];
+      const winEl = document.getElementById("winVal");
+      winEl.textContent = latest.win_pct.toFixed(1) + "%";
+      winEl.className = "val " + (latest.win_pct >= 50 ? "win-high" : "win-low");
+      document.getElementById("myVal").textContent = latest.my_live.toFixed(1);
+      document.getElementById("oppVal").textContent = latest.opp_live.toFixed(1);
+      document.getElementById("lastUpdated").textContent =
+        `Latest update: ${latest.timestamp} • ${rows.length} snapshots (t = 1 to ${rows.length})`;
+
+      const labels = rows.map((_, i) => i + 1); // Linear t = 1..N (no dead-time gaps)
+      const dataPoints = rows.map(r => r.win_pct);
+
+      if (chartInstance) chartInstance.destroy();
+      const ctx = document.getElementById("winChart").getContext("2d");
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Win %",
+            data: dataPoints,
+            borderColor: "#38bdf8",
+            backgroundColor: "rgba(56, 189, 248, 0.15)",
+            borderWidth: 2.5,
+            pointRadius: 2.5,
+            tension: 0.25,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const r = rows[items[0].dataIndex];
+                  return `t = ${items[0].label} (${r.timestamp})`;
+                },
+                label: (item) => {
+                  const r = rows[item.dataIndex];
+                  return `Win%: ${r.win_pct}% | Score: ${r.my_live}-${r.opp_live}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: "Game Snapshot (t)", color: "#94a3b8" },
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148, 163, 184, 0.1)" }
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: { color: "#94a3b8", callback: v => v + "%" },
+              grid: { color: "rgba(148, 163, 184, 0.15)" }
+            }
+          }
+        }
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
