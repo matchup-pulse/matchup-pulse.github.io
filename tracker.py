@@ -17,25 +17,26 @@ CHART_FILE = "win_prob_chart.png"
 
 URL = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{SEASON_ID}/segments/0/leagues/{LEAGUE_ID}"
 SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-PARAMS = {"view": ["mMatchupScore", "mScoreboard"]}
+PARAMS = {"view": ["mMatchupScore", "mScoreboard", "mBoxscore"]}
 COOKIES = {"SWID": SWID, "espn_s2": ESPN_S2} if SWID else {}
 
 def games_are_live():
-    """Returns True if at least one NFL game is currently in progress."""
     try:
         sb = requests.get(SCOREBOARD_URL, timeout=15).json()
         for event in sb.get("events", []):
-            state = event.get("status", {}).get("type", {}).get("state", "")
-            if state == "in":  # "in" = game currently in progress
+            if event.get("status", {}).get("type", {}).get("state", "") == "in":
                 return True
     except Exception:
-        return True  # Fallback: allow logging if scoreboard check fails
+        return True
     return False
 
 def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     my_rem = max(0.0, my_proj - my_live)
     opp_rem = max(0.0, opp_proj - opp_live)
-    combined_std = max(1.5, math.sqrt((my_rem + opp_rem) * 1.8))
+    if my_rem == 0 and opp_rem == 0:
+        return 100.0 if my_live > opp_live else (0.0 if my_live < opp_live else 50.0)
+    # Calibrated to match ESPN's wider fantasy player standard deviation
+    combined_std = max(2.5, math.sqrt((my_rem + opp_rem) * 5.2))
     z_score = (my_proj - opp_proj) / combined_std
     return round(0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0))) * 100, 1)
 
@@ -61,9 +62,14 @@ def main():
         opp_live = round(opp.get("totalPointsLive", opp.get("totalPoints", 0.0)), 2)
         my_proj = round(me.get("totalProjectedPointsLive", my_live), 2)
         opp_proj = round(opp.get("totalProjectedPointsLive", opp_live), 2)
-        win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
 
-        # Check if we already logged this exact score/win% or if no games are live
+        # 1. Try ESPN's native winProbability field first (stored as 0.0 - 1.0 or 0 - 100)
+        espn_wp = me.get("winProbability")
+        if espn_wp is not None:
+            win_pct = round(espn_wp * 100 if espn_wp <= 1.0 else espn_wp, 1)
+        else:
+            win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
+
         live_now = games_are_live()
         already_logged_same = False
         if os.path.isfile(CSV_FILE):
@@ -75,7 +81,6 @@ def main():
                         and last["win_pct"] == win_pct):
                     already_logged_same = True
 
-        # Skip logging if no games are live AND we already captured the latest final score
         if not is_manual and not live_now and already_logged_same:
             print("No live NFL games and no score change. Skipping log.")
             return
