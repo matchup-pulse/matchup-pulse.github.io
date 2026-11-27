@@ -6,6 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Matchup Pulse • Multi-Sport Win% Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -32,9 +33,21 @@
     }
     .container { max-width: 540px; margin: 0 auto; }
 
-    /* Top Header with Team Name + Switcher Dropdown */
+    /* Top Header with Logo, Team Name + Switcher Dropdown */
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; }
     .team-header { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+    .app-logo {
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.05rem;
+    }
     .live-dot {
       flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--green);
       box-shadow: 0 0 10px var(--green); animation: pulse 2s infinite;
@@ -144,6 +157,7 @@
   <div class="container">
     <div class="topbar">
       <div class="team-header">
+        <div class="app-logo">📈</div>
         <div class="live-dot"></div>
         <div class="team-switcher-wrap">
           <span class="active-team-title" id="activeTeamName">Matchup Pulse</span>
