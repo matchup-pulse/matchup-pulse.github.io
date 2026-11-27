@@ -3,12 +3,8 @@ name: Track ESPN Win Probability
 on:
   workflow_dispatch:
   schedule:
-    # Every 10 mins during live game windows (UTC)
-    - cron: '*/10 18-23 * * 0'
-    - cron: '*/10 0-4 * * 1'
-    - cron: '*/10 1-4 * * 2,5'
-    - cron: '*/10 18-23 * * 4,5,6'
-    - cron: '*/10 1-4 * * 4,6,0'
+    # Check every 10 mins 24/7; tracker.py exits immediately unless a real game is live
+    - cron: '*/10 * * * *'
 
 permissions:
   contents: write
