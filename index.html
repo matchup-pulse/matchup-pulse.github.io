@@ -5,8 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Matchup Pulse" />
   <title>Matchup Pulse • Multi-Sport Win% Tracker</title>
+
+  <!-- Open Graph & Social Link Preview Tags -->
+  <meta property="og:title" content="Matchup Pulse • Live Fantasy Win% Tracker" />
+  <meta property="og:description" content="Real-time win probability momentum timelines and live matchup projections for ESPN Fantasy Football, Basketball, Hockey, and Baseball." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Matchup Pulse • Live Fantasy Win% Tracker" />
+  <meta name="twitter:description" content="Track live ESPN Fantasy win probability swings across every sport." />
+
+  <!-- Emoji Favicon & Dynamic 180x180 PNG Apple Touch Icon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+  <link rel="apple-touch-icon" id="appleTouchIcon" href="">
+  <script>
+    // Generate a crisp 180x180 PNG icon for iOS Home Screen bookmarks
+    (function() {
+      try {
+        const c = document.createElement("canvas");
+        c.width = 180; c.height = 180;
+        const ctx = c.getContext("2d");
+        const grad = ctx.createLinearGradient(0, 0, 180, 180);
+        grad.addColorStop(0, "#1a2234");
+        grad.addColorStop(1, "#090d16");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 180, 180);
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+        ctx.lineWidth = 6;
+        ctx.strokeRect(3, 3, 174, 174);
+        ctx.font = "96px serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("📈", 90, 96);
+        document.getElementById("appleTouchIcon").href = c.toDataURL("image/png");
+      } catch (e) {}
+    })();
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -26,56 +62,67 @@
     }
 
     * { box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
+    html, body { overscroll-behavior-y: contain; }
     body {
       margin: 0; padding: 18px 16px 36px;
       background: radial-gradient(circle at top center, #131c31 0%, var(--bg) 65%);
       color: var(--text-main); min-height: 100vh;
     }
-    .container { max-width: 540px; margin: 0 auto; }
+    .container { max-width: 540px; margin: 0 auto; transition: transform 0.2s ease; }
 
-    /* Top Header with Logo, Team Name + Switcher Dropdown */
-    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; }
+    /* Pull-to-refresh banner */
+    .ptr-indicator {
+      text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--accent);
+      height: 0; overflow: hidden; opacity: 0; transition: height 0.2s ease, opacity 0.2s ease;
+    }
+    .ptr-indicator.visible { height: 28px; opacity: 1; }
+
+    /* Top Header */
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; }
     .team-header { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
     .app-logo {
-      flex-shrink: 0;
-      width: 30px;
-      height: 30px;
-      border-radius: 9px;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.05rem;
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px;
+      background: rgba(56, 189, 248, 0.14); border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex; align-items: center; justify-content: center; font-size: 1.05rem;
     }
     .live-dot {
-      flex-shrink: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--green);
+      flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--green);
       box-shadow: 0 0 10px var(--green); animation: pulse 2s infinite;
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
     .team-switcher-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
     .active-team-title {
-      font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em;
+      font-size: 1.02rem; font-weight: 800; letter-spacing: -0.02em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .team-select {
       background: var(--surface-elevated); color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px;
-      padding: 4px 8px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
-      max-width: 145px;
+      padding: 4px 6px; font-size: 0.76rem; font-weight: 700; cursor: pointer;
+      max-width: 120px;
     }
 
-    .right-controls { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .right-controls { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
     select.week-select {
       background: var(--surface-elevated); color: var(--text-main);
       border: 1px solid var(--border); border-radius: 10px;
-      padding: 7px 10px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+      padding: 6px 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    }
+    .refresh-pill {
+      background: var(--surface-elevated); color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 6px 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .refresh-pill.active {
+      background: rgba(16, 185, 129, 0.14); color: #34d399;
+      border-color: rgba(16, 185, 129, 0.35);
     }
     .add-btn {
       background: rgba(56, 189, 248, 0.15); color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px;
-      padding: 7px 10px; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+      padding: 6px 10px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
     }
 
     /* Hero Card */
@@ -96,10 +143,13 @@
     .delta-down { background: var(--red-glow); color: #fb7185; }
     .delta-flat { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
 
-    .matchup-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; }
-    .team-block { display: flex; flex-direction: column; }
-    .team-block.right { text-align: right; }
-    .team-tag { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+    .matchup-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 16px; }
+    .team-block { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .team-block.right { text-align: right; align-items: flex-end; }
+    .team-tag {
+      font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    }
     .team-score { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 2px; }
     .team-proj { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
 
@@ -111,7 +161,7 @@
     .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 4px; }
     .chart-title { font-size: 0.85rem; font-weight: 700; }
     .chart-sub { font-size: 0.74rem; color: var(--text-muted); }
-    .chart-wrapper { height: 260px; width: 100%; }
+    .chart-wrapper { height: 255px; width: 100%; }
 
     /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
@@ -120,26 +170,50 @@
     .stat-pill .v { font-size: 1.05rem; font-weight: 800; margin-top: 4px; }
 
     .footer { text-align: center; font-size: 0.74rem; color: var(--text-muted); line-height: 1.4; }
+    .footer-hint { font-size: 0.68rem; opacity: 0.7; margin-top: 4px; }
 
-    /* Modal for Adding Teams */
+    /* Modal */
     .modal-backdrop {
-      display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+      display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.78);
       backdrop-filter: blur(4px); z-index: 50; align-items: center; justify-content: center; padding: 16px;
     }
     .modal-backdrop.open { display: flex; }
     .modal {
       background: var(--surface-elevated); border: 1px solid var(--border);
-      border-radius: 20px; padding: 20px; width: 100%; max-width: 400px;
+      border-radius: 20px; padding: 20px; width: 100%; max-width: 420px;
+      max-height: 90vh; overflow-y: auto;
     }
     .modal h2 { margin: 0 0 6px; font-size: 1.1rem; }
-    .modal p { margin: 0 0 14px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
-    .field { margin-bottom: 12px; }
-    .field label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+    .modal p { margin: 0 0 12px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+    .paste-box {
+      background: rgba(56, 189, 248, 0.08); border: 1px dashed rgba(56, 189, 248, 0.4);
+      border-radius: 12px; padding: 10px; margin-bottom: 14px;
+    }
+    .paste-box label { display: block; font-size: 0.72rem; font-weight: 700; color: var(--accent); margin-bottom: 5px; }
+    .paste-status { font-size: 0.72rem; color: #34d399; margin-top: 5px; min-height: 14px; }
+
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 0.74rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
     .field input, .field select {
       width: 100%; background: var(--bg); color: var(--text-main);
-      border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 0.9rem;
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 0.88rem;
     }
-    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* Collapsible Helper Tips */
+    details.helper-box {
+      background: rgba(9, 13, 22, 0.6); border: 1px solid var(--border);
+      border-radius: 12px; padding: 9px 11px; margin-top: 10px; font-size: 0.76rem; color: var(--text-muted);
+    }
+    details.helper-box summary {
+      cursor: pointer; font-weight: 700; color: var(--accent); list-style: none;
+    }
+    details.helper-box summary::-webkit-details-marker { display: none; }
+    details.helper-box ol, details.helper-box ul { margin: 8px 0 2px; padding-left: 18px; line-height: 1.45; }
+    details.helper-box li { margin-bottom: 4px; }
+    details.helper-box code { color: #f8fafc; background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 4px; }
+
+    .modal-actions { display: flex; gap: 8px; margin-top: 14px; }
     .btn-primary {
       flex: 1; background: var(--accent); color: #090d16; font-weight: 800;
       border: none; border-radius: 10px; padding: 10px; cursor: pointer;
@@ -154,7 +228,8 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="ptr-indicator" id="ptrIndicator">↓ Release to refresh live scores</div>
+  <div class="container" id="mainContainer">
     <div class="topbar">
       <div class="team-header">
         <div class="app-logo">📈</div>
@@ -166,6 +241,7 @@
       </div>
       <div class="right-controls">
         <select class="week-select" id="weekSelect" style="display:none;"></select>
+        <button class="refresh-pill" id="autoRefreshBtn" onclick="toggleAutoRefresh()" title="Toggle 60s auto-refresh">↻ 60s</button>
         <button class="add-btn" onclick="openModal()">+ Team</button>
       </div>
     </div>
@@ -186,7 +262,7 @@
           <span class="team-proj" id="myProj">Proj: --</span>
         </div>
         <div class="team-block right">
-          <span class="team-tag">Opponent</span>
+          <span class="team-tag" id="oppLabel">Opponent</span>
           <span class="team-score" id="oppScore">--</span>
           <span class="team-proj" id="oppProj">Proj: --</span>
         </div>
@@ -213,18 +289,25 @@
       <div class="stat-pill"><div class="k">Proj Margin</div><div class="v" id="projMargin">--</div></div>
     </div>
 
-    <div class="footer" id="lastUpdated">Syncing live feed...</div>
+    <div class="footer">
+      <div id="lastUpdated">Syncing live feed...</div>
+      <div class="footer-hint">Pull down to refresh • Tap ↻ 60s for live auto-updates</div>
+    </div>
   </div>
 
   <!-- Add / Manage Teams Modal -->
   <div class="modal-backdrop" id="teamModal">
     <div class="modal">
       <h2>+ Add Fantasy Team</h2>
-      <p>Track multiple ESPN leagues across Football, Basketball, Hockey, or Baseball. Public leagues work immediately.</p>
-      <div class="field">
-        <label>Team Display Name</label>
-        <input type="text" id="inName" placeholder="e.g. Dynasty Squad" />
+      <p>Paste your ESPN team link below to auto-fill everything, or enter your League & Team IDs manually.</p>
+
+      <!-- Paste-URL Auto-Parser -->
+      <div class="paste-box">
+        <label>⚡ Quick Paste: ESPN Team or Boxscore URL</label>
+        <input type="url" id="inPasteUrl" placeholder="https://fantasy.espn.com/football/team?leagueId=..." oninput="parseEspnUrl(this.value)" />
+        <div class="paste-status" id="pasteStatus"></div>
       </div>
+
       <div class="field">
         <label>Sport</label>
         <select id="inSport">
@@ -234,14 +317,40 @@
           <option value="flb">⚾ Fantasy Baseball (MLB)</option>
         </select>
       </div>
-      <div class="field">
-        <label>ESPN League ID</label>
-        <input type="text" id="inLeague" placeholder="e.g. 12345678" />
+      <div class="two-col">
+        <div class="field">
+          <label>ESPN League ID</label>
+          <input type="text" id="inLeague" placeholder="e.g. 12345678" />
+        </div>
+        <div class="field">
+          <label>ESPN Team ID</label>
+          <input type="number" id="inTeam" placeholder="e.g. 4" min="1" max="30" />
+        </div>
       </div>
       <div class="field">
-        <label>ESPN Team ID (1–20)</label>
-        <input type="number" id="inTeam" placeholder="e.g. 4" min="1" max="30" />
+        <label>Team Name (auto-detected if left blank)</label>
+        <input type="text" id="inName" placeholder="e.g. Dynasty Squad" />
       </div>
+
+      <!-- Helper Tips: Finding IDs & Making League Public -->
+      <details class="helper-box">
+        <summary>❓ Where do I find my ID? (Click to expand)</summary>
+        <ul>
+          <li>Open your team page on <strong>fantasy.espn.com</strong> in a web browser.</li>
+          <li>Look at the website address bar—your URL contains <code>leagueId=12345678</code> and <code>teamId=4</code>.</li>
+          <li>Copy that entire link and paste it into the <strong>Quick Paste</strong> box above to auto-fill both numbers!</li>
+        </ul>
+      </details>
+
+      <details class="helper-box">
+        <summary>🔓 League Private? How to make it viewable to public</summary>
+        <ol>
+          <li>Have your <strong>League Manager (LM)</strong> open the league on <strong>fantasy.espn.com</strong> (desktop or mobile browser—not the app).</li>
+          <li>Go to <strong>LM Tools</strong> → <strong>League Settings</strong> → <strong>Basic Settings</strong>.</li>
+          <li>Set <strong>Make League Viewable to Public</strong> to <strong>Yes</strong> and click <strong>Save Changes</strong>.</li>
+        </ol>
+      </details>
+
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
         <button class="btn-primary" onclick="saveNewTeam()">Save & Switch</button>
@@ -272,6 +381,8 @@
     let activeTeam = null;
     let allRows = [];
     let chartInstance = null;
+    let autoRefreshTimer = null;
+    let autoRefreshEnabled = localStorage.getItem("mp_auto_refresh") === "1";
 
     const fiftyLinePlugin = {
       id: 'fiftyLine',
@@ -290,6 +401,73 @@
       }
     };
 
+    /* Paste-URL Auto-Parser */
+    function parseEspnUrl(raw) {
+      const statusEl = document.getElementById("pasteStatus");
+      if (!raw || !raw.trim()) { statusEl.textContent = ""; return; }
+
+      const lower = raw.toLowerCase();
+      let sport = null;
+      if (lower.includes("/football/") || lower.includes("ffl")) sport = "ffl";
+      else if (lower.includes("/basketball/") || lower.includes("fba")) sport = "fba";
+      else if (lower.includes("/hockey/") || lower.includes("fhl")) sport = "fhl";
+      else if (lower.includes("/baseball/") || lower.includes("flb")) sport = "flb";
+
+      const leagueMatch = raw.match(/[?&]leagueId=(\d+)/i);
+      const teamMatch = raw.match(/[?&]teamId=(\d+)/i);
+
+      if (sport) document.getElementById("inSport").value = sport;
+      if (leagueMatch) document.getElementById("inLeague").value = leagueMatch[1];
+      if (teamMatch) document.getElementById("inTeam").value = teamMatch[1];
+
+      if (leagueMatch && teamMatch) {
+        statusEl.style.color = "#34d399";
+        statusEl.textContent = `✓ Detected ${(sport || "ffl").toUpperCase()} • League #${leagueMatch[1]} • Team #${teamMatch[1]}`;
+        lookupRealEspnNames(sport || document.getElementById("inSport").value, leagueMatch[1], Number(teamMatch[1])).then(names => {
+          if (names && names.myName && !document.getElementById("inName").value.trim()) {
+            document.getElementById("inName").value = names.myName;
+            statusEl.textContent += ` (${names.myName})`;
+          }
+        });
+      } else if (leagueMatch) {
+        statusEl.style.color = "#38bdf8";
+        statusEl.textContent = `✓ Found League #${leagueMatch[1]} — enter your Team ID (1–20) below.`;
+      } else {
+        statusEl.style.color = "#fb7185";
+        statusEl.textContent = "Could not find leagueId in that URL. Enter IDs manually below.";
+      }
+    }
+
+    async function lookupRealEspnNames(sport, leagueId, teamId) {
+      if (!leagueId || !teamId) return null;
+      try {
+        const season = getCurrentSeason(sport);
+        const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${sport}/seasons/${season}/segments/0/leagues/${leagueId}?view=mTeam&view=mMatchupScore`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+
+        const teamMap = {};
+        for (const t of (data.teams || [])) {
+          const fullName = t.name || `${t.location || ""} ${t.nickname || ""}`.trim() || t.abbrev || `Team #${t.id}`;
+          teamMap[t.id] = fullName;
+        }
+
+        const myName = teamMap[Number(teamId)] || null;
+        let oppName = null;
+        const wk = data.scoringPeriodId;
+        for (const m of (data.schedule || [])) {
+          if (m.matchupPeriodId !== wk) continue;
+          const h = m.home || {}, a = m.away || {};
+          if (h.teamId === Number(teamId)) { oppName = teamMap[a.teamId] || null; break; }
+          if (a.teamId === Number(teamId)) { oppName = teamMap[h.teamId] || null; break; }
+        }
+        return { myName, oppName };
+      } catch (e) {
+        return null;
+      }
+    }
+
     function clearDisplay(msg) {
       document.getElementById("heroProb").textContent = "--%";
       document.getElementById("heroProb").style.color = "#f8fafc";
@@ -300,6 +478,7 @@
       document.getElementById("oppScore").textContent = "--";
       document.getElementById("myProj").textContent = "Proj: --";
       document.getElementById("oppProj").textContent = "Proj: --";
+      document.getElementById("oppLabel").textContent = activeTeam?.oppName || "Opponent";
       document.getElementById("probBar").style.width = "50%";
       document.getElementById("peakProb").textContent = "--%";
       document.getElementById("lowProb").textContent = "--%";
@@ -353,11 +532,21 @@
       renderTeamDropdown();
     }
 
+    function persistUpdatedTeam(updated) {
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]");
+      const idx = saved.findIndex(t => t.id === updated.id);
+      if (idx !== -1) {
+        saved[idx] = updated;
+        localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      }
+    }
+
     function renderTeamDropdown() {
       const sel = document.getElementById("teamSelect");
       if (!activeTeam) {
         document.getElementById("activeTeamName").textContent = "Matchup Pulse";
         document.getElementById("myLabel").textContent = "My Team";
+        document.getElementById("oppLabel").textContent = "Opponent";
         sel.style.display = "none";
         clearDisplay("Tap + Team in the top right to add your ESPN league.");
         openModal();
@@ -367,6 +556,7 @@
       sel.style.display = "inline-block";
       document.getElementById("activeTeamName").textContent = activeTeam.name;
       document.getElementById("myLabel").textContent = activeTeam.name;
+      document.getElementById("oppLabel").textContent = activeTeam.oppName || "Opponent";
       document.getElementById("sportLabel").textContent = SPORT_LABELS[activeTeam.sport] || "🏆 Fantasy";
 
       sel.innerHTML = teams.map(t =>
@@ -380,46 +570,74 @@
       };
     }
 
-    async function loadActiveTeamData() {
+    async function loadActiveTeamData(silent = false) {
       if (!activeTeam) return;
-      allRows = [];
-      clearDisplay(`Fetching ${activeTeam.name}...`);
+      if (!silent) {
+        allRows = [];
+        clearDisplay(`Fetching ${activeTeam.name}...`);
+      }
 
+      // Enrich with real ESPN team & opponent names if leagueId is known
+      if (activeTeam.leagueId) {
+        lookupRealEspnNames(activeTeam.sport, activeTeam.leagueId, activeTeam.teamId).then(names => {
+          if (!names) return;
+          let changed = false;
+          if (names.myName && activeTeam.name.startsWith("Team #")) {
+            activeTeam.name = names.myName;
+            changed = true;
+          }
+          if (names.oppName && activeTeam.oppName !== names.oppName) {
+            activeTeam.oppName = names.oppName;
+            changed = true;
+          }
+          if (changed) {
+            persistUpdatedTeam(activeTeam);
+            renderTeamDropdown();
+          }
+        });
+      }
+
+      let loadedRows = [];
       const csvPath = activeTeam.csvFile || `logs/${activeTeam.sport}_${activeTeam.leagueId}_${activeTeam.teamId}.csv`;
       try {
         const res = await fetch(`${REPO_RAW}/${csvPath}?t=${Date.now()}`);
         if (res.ok) {
           const text = await res.text();
           const lines = text.trim().split("\n").slice(1);
-          allRows = lines.map(line => {
+          loadedRows = lines.map(line => {
             const [timestamp, week, my_live, opp_live, my_proj, opp_proj, win_pct] = line.split(",");
             return { timestamp, week: Number(week), my_live: Number(my_live), opp_live: Number(opp_live), my_proj: Number(my_proj), opp_proj: Number(opp_proj), win_pct: Number(win_pct) };
           }).filter(r => !isNaN(r.week));
         }
       } catch (e) {}
 
-      if (allRows.length === 0 && activeTeam.leagueId) {
-        await fetchLiveEspnSnapshot(activeTeam);
+      if (loadedRows.length === 0 && activeTeam.leagueId) {
+        loadedRows = await fetchLiveEspnSnapshot(activeTeam);
       }
 
+      allRows = loadedRows;
       const weeks = [...new Set(allRows.map(r => r.week))].sort((a, b) => b - a);
       const wSel = document.getElementById("weekSelect");
       if (weeks.length > 0) {
+        const prevSelectedWeek = Number(wSel.value);
         wSel.style.display = "inline-block";
         wSel.innerHTML = weeks.map(w => `<option value="${w}">Wk ${w}</option>`).join("");
+        const targetWeek = weeks.includes(prevSelectedWeek) ? prevSelectedWeek : weeks[0];
+        wSel.value = targetWeek;
         wSel.onchange = () => renderWeek(Number(wSel.value));
-        renderWeek(weeks[0]);
+        renderWeek(targetWeek);
       } else {
         clearDisplay(`No live data found for League #${activeTeam.leagueId} (Team #${activeTeam.teamId}). Make sure the ESPN league is set to Public.`);
       }
     }
 
     async function fetchLiveEspnSnapshot(team) {
+      const snap = [];
       try {
         const season = getCurrentSeason(team.sport);
         const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${team.sport}/seasons/${season}/segments/0/leagues/${team.leagueId}?view=mMatchupScore&view=mScoreboard`;
         const res = await fetch(url);
-        if (!res.ok) return;
+        if (!res.ok) return snap;
         const data = await res.json();
         const wk = data.scoringPeriodId;
         for (const m of (data.schedule || [])) {
@@ -433,10 +651,11 @@
           const myProj = me.totalProjectedPointsLive ?? myLive;
           const oppProj = opp.totalProjectedPointsLive ?? oppLive;
           const wp = me.winProbability != null ? (me.winProbability <= 1 ? me.winProbability * 100 : me.winProbability) : 50;
-          allRows.push({ timestamp: "Live Now", week: wk, my_live: myLive, opp_live: oppLive, my_proj: myProj, opp_proj: oppProj, win_pct: Number(wp.toFixed(1)) });
+          snap.push({ timestamp: "Live Now", week: wk, my_live: myLive, opp_live: oppLive, my_proj: myProj, opp_proj: oppProj, win_pct: Number(wp.toFixed(1)) });
           break;
         }
       } catch (e) {}
+      return snap;
     }
 
     function renderWeek(weekNum) {
@@ -492,6 +711,7 @@
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          animation: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: { display: false },
@@ -516,6 +736,70 @@
       });
     }
 
+    /* Auto-Refresh Toggle (60s) */
+    function applyAutoRefreshState() {
+      const btn = document.getElementById("autoRefreshBtn");
+      if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+      if (autoRefreshEnabled) {
+        btn.classList.add("active");
+        btn.textContent = "↻ Live";
+        autoRefreshTimer = setInterval(() => {
+          if (!document.hidden && activeTeam) loadActiveTeamData(true);
+        }, 60000);
+      } else {
+        btn.classList.remove("active");
+        btn.textContent = "↻ 60s";
+      }
+    }
+
+    function toggleAutoRefresh() {
+      autoRefreshEnabled = !autoRefreshEnabled;
+      localStorage.setItem("mp_auto_refresh", autoRefreshEnabled ? "1" : "0");
+      applyAutoRefreshState();
+      if (autoRefreshEnabled && activeTeam) loadActiveTeamData(true);
+    }
+
+    /* Mobile Pull-to-Refresh Feel */
+    (function setupPullToRefresh() {
+      let startY = 0;
+      let pulling = false;
+      const ptr = document.getElementById("ptrIndicator");
+      const container = document.getElementById("mainContainer");
+
+      window.addEventListener("touchstart", e => {
+        if (window.scrollY === 0 && !document.getElementById("teamModal").classList.contains("open")) {
+          startY = e.touches[0].clientY;
+          pulling = true;
+        }
+      }, { passive: true });
+
+      window.addEventListener("touchmove", e => {
+        if (!pulling) return;
+        const dy = e.touches[0].clientY - startY;
+        if (dy > 20 && window.scrollY === 0) {
+          const pull = Math.min(dy * 0.45, 55);
+          container.style.transform = `translateY(${pull}px)`;
+          ptr.classList.add("visible");
+          ptr.textContent = dy > 95 ? "↑ Release to refresh now" : "↓ Pull to refresh live scores";
+        }
+      }, { passive: true });
+
+      window.addEventListener("touchend", e => {
+        if (!pulling) return;
+        const dy = (e.changedTouches[0]?.clientY || startY) - startY;
+        pulling = false;
+        container.style.transform = "";
+        if (dy > 95 && window.scrollY === 0) {
+          ptr.textContent = "⟳ Refreshing...";
+          loadActiveTeamData(true).finally(() => {
+            setTimeout(() => ptr.classList.remove("visible"), 500);
+          });
+        } else {
+          ptr.classList.remove("visible");
+        }
+      }, { passive: true });
+    })();
+
     function openModal() {
       document.getElementById("teamModal").classList.add("open");
       renderSavedList();
@@ -534,16 +818,24 @@
       `).join("");
     }
 
-    function saveNewTeam() {
-      const name = document.getElementById("inName").value.trim();
+    async function saveNewTeam() {
+      let name = document.getElementById("inName").value.trim();
       const sport = document.getElementById("inSport").value;
       const leagueId = document.getElementById("inLeague").value.trim();
       const teamId = Number(document.getElementById("inTeam").value);
-      if (!name || !leagueId || !teamId) return alert("Please fill in Team Name, League ID, and Team ID.");
+      if (!leagueId || !teamId) return alert("Please enter both League ID and Team ID (or paste your ESPN URL above).");
+
+      let oppName = null;
+      const names = await lookupRealEspnNames(sport, leagueId, teamId);
+      if (names) {
+        if (!name && names.myName) name = names.myName;
+        if (names.oppName) oppName = names.oppName;
+      }
+      if (!name) name = `Team #${teamId}`;
 
       const newTeam = {
         id: `${sport}_${leagueId}_${teamId}`,
-        name, sport, leagueId, teamId,
+        name, oppName, sport, leagueId, teamId,
         csvFile: `logs/${sport}_${leagueId}_${teamId}.csv`
       };
       const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]").filter(t => t.id !== newTeam.id);
@@ -551,6 +843,8 @@
       localStorage.setItem("mp_user_teams", JSON.stringify(saved));
       localStorage.setItem("mp_active_team", newTeam.id);
 
+      document.getElementById("inPasteUrl").value = "";
+      document.getElementById("pasteStatus").textContent = "";
       document.getElementById("inName").value = "";
       document.getElementById("inLeague").value = "";
       document.getElementById("inTeam").value = "";
@@ -570,6 +864,7 @@
       loadActiveTeamData();
     }
 
+    applyAutoRefreshState();
     loadTeamsFromStorage();
     loadActiveTeamData();
   </script>
