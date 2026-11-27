@@ -78,4 +78,486 @@
       padding: 3px 8px; border-radius: 6px; margin-bottom: 4px;
     }
     .hero-prob { font-size: 2.75rem; font-weight: 800; letter-spacing: -0.04em; line-height: 1.05; margin: 4px 0; }
-    .delta-badge { font-size: 0.78rem; font-weight: 700; padding: 4px 10
+    .delta-badge { font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+    .delta-up { background: var(--green-glow); color: #34d399; }
+    .delta-down { background: var(--red-glow); color: #fb7185; }
+    .delta-flat { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+
+    .matchup-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; }
+    .team-block { display: flex; flex-direction: column; }
+    .team-block.right { text-align: right; }
+    .team-tag { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+    .team-score { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 2px; }
+    .team-proj { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+
+    .prob-bar-track { height: 8px; width: 100%; background: rgba(244, 63, 94, 0.3); border-radius: 999px; overflow: hidden; margin-top: 12px; }
+    .prob-bar-fill { height: 100%; background: linear-gradient(90deg, #059669, #34d399); transition: width 0.5s ease; }
+
+    /* Chart Card */
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 16px 14px 12px; margin-bottom: 14px; }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 4px; }
+    .chart-title { font-size: 0.85rem; font-weight: 700; }
+    .chart-sub { font-size: 0.74rem; color: var(--text-muted); }
+    .chart-wrapper { height: 260px; width: 100%; }
+
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 10px; text-align: center; }
+    .stat-pill .k { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+    .stat-pill .v { font-size: 1.05rem; font-weight: 800; margin-top: 4px; }
+
+    .footer { text-align: center; font-size: 0.74rem; color: var(--text-muted); line-height: 1.4; }
+
+    /* Modal for Adding Teams */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px); z-index: 50; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface-elevated); border: 1px solid var(--border);
+      border-radius: 20px; padding: 20px; width: 100%; max-width: 400px;
+    }
+    .modal h2 { margin: 0 0 6px; font-size: 1.1rem; }
+    .modal p { margin: 0 0 14px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+    .field input, .field select {
+      width: 100%; background: var(--bg); color: var(--text-main);
+      border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 0.9rem;
+    }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-primary {
+      flex: 1; background: var(--accent); color: #090d16; font-weight: 800;
+      border: none; border-radius: 10px; padding: 10px; cursor: pointer;
+    }
+    .btn-secondary {
+      background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px; font-weight: 600; cursor: pointer;
+    }
+    .saved-list { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; max-height: 120px; overflow-y: auto; }
+    .saved-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding: 4px 0; }
+    .del-link { color: var(--red); cursor: pointer; font-weight: 700; background: none; border: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="team-header">
+        <div class="live-dot"></div>
+        <div class="team-switcher-wrap">
+          <span class="active-team-title" id="activeTeamName">Matchup Pulse</span>
+          <select class="team-select" id="teamSelect" title="Switch Team"></select>
+        </div>
+      </div>
+      <div class="right-controls">
+        <select class="week-select" id="weekSelect" style="display:none;"></select>
+        <button class="add-btn" onclick="openModal()">+ Team</button>
+      </div>
+    </div>
+
+    <div class="hero-card">
+      <div class="hero-top">
+        <div>
+          <span class="sport-pill" id="sportLabel">🏈 Fantasy Football</span>
+          <div class="hero-prob" id="heroProb">--%</div>
+        </div>
+        <div id="deltaBadge" class="delta-badge delta-flat">--</div>
+      </div>
+
+      <div class="matchup-row">
+        <div class="team-block">
+          <span class="team-tag" id="myLabel">My Team</span>
+          <span class="team-score" id="myScore">--</span>
+          <span class="team-proj" id="myProj">Proj: --</span>
+        </div>
+        <div class="team-block right">
+          <span class="team-tag">Opponent</span>
+          <span class="team-score" id="oppScore">--</span>
+          <span class="team-proj" id="oppProj">Proj: --</span>
+        </div>
+      </div>
+
+      <div class="prob-bar-track">
+        <div class="prob-bar-fill" id="probBar" style="width: 50%"></div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Momentum Timeline</span>
+        <span class="chart-sub" id="stepCount">t = 0</span>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="winChart"></canvas>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-pill"><div class="k">Peak Win%</div><div class="v" id="peakProb" style="color: var(--green);">--%</div></div>
+      <div class="stat-pill"><div class="k">Low Win%</div><div class="v" id="lowProb" style="color: var(--red);">--%</div></div>
+      <div class="stat-pill"><div class="k">Proj Margin</div><div class="v" id="projMargin">--</div></div>
+    </div>
+
+    <div class="footer" id="lastUpdated">Syncing live feed...</div>
+  </div>
+
+  <!-- Add / Manage Teams Modal -->
+  <div class="modal-backdrop" id="teamModal">
+    <div class="modal">
+      <h2>+ Add Fantasy Team</h2>
+      <p>Track multiple ESPN leagues across Football, Basketball, Hockey, or Baseball. Public leagues work immediately.</p>
+      <div class="field">
+        <label>Team Display Name</label>
+        <input type="text" id="inName" placeholder="e.g. Dynasty Squad" />
+      </div>
+      <div class="field">
+        <label>Sport</label>
+        <select id="inSport">
+          <option value="ffl">🏈 Fantasy Football (NFL)</option>
+          <option value="fba">🏀 Fantasy Basketball (NBA)</option>
+          <option value="fhl">🏒 Fantasy Hockey (NHL)</option>
+          <option value="flb">⚾ Fantasy Baseball (MLB)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>ESPN League ID</label>
+        <input type="text" id="inLeague" placeholder="e.g. 12345678" />
+      </div>
+      <div class="field">
+        <label>ESPN Team ID (1–20)</label>
+        <input type="number" id="inTeam" placeholder="e.g. 4" min="1" max="30" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveNewTeam()">Save & Switch</button>
+      </div>
+      <div class="saved-list" id="savedTeamsList"></div>
+    </div>
+  </div>
+
+  <script>
+    const REPO_RAW = "https://raw.githubusercontent.com/whi1201/espn-win-tracker/refs/heads/main";
+    const SPORT_LABELS = {
+      ffl: "🏈 Fantasy Football",
+      fba: "🏀 Fantasy Basketball",
+      fhl: "🏒 Fantasy Hockey",
+      flb: "⚾ Fantasy Baseball"
+    };
+
+    function getCurrentSeason(sport) {
+      const now = new Date();
+      const y = now.getUTCFullYear();
+      const m = now.getUTCMonth() + 1;
+      if (sport === "ffl") return m >= 7 ? y : y - 1;
+      if (sport === "fba" || sport === "fhl") return m >= 8 ? y + 1 : y;
+      return y;
+    }
+
+    let teams = [];
+    let activeTeam = null;
+    let allRows = [];
+    let chartInstance = null;
+
+    const fiftyLinePlugin = {
+      id: 'fiftyLine',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+        const yPos = y.getPixelForValue(50);
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.moveTo(left, yPos);
+        ctx.lineTo(right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    function clearDisplay(msg) {
+      document.getElementById("heroProb").textContent = "--%";
+      document.getElementById("heroProb").style.color = "#f8fafc";
+      const badge = document.getElementById("deltaBadge");
+      badge.className = "delta-badge delta-flat";
+      badge.textContent = "--";
+      document.getElementById("myScore").textContent = "--";
+      document.getElementById("oppScore").textContent = "--";
+      document.getElementById("myProj").textContent = "Proj: --";
+      document.getElementById("oppProj").textContent = "Proj: --";
+      document.getElementById("probBar").style.width = "50%";
+      document.getElementById("peakProb").textContent = "--%";
+      document.getElementById("lowProb").textContent = "--%";
+      document.getElementById("projMargin").textContent = "--";
+      document.getElementById("projMargin").style.color = "#f8fafc";
+      document.getElementById("stepCount").textContent = "t = 0";
+      document.getElementById("weekSelect").style.display = "none";
+      document.getElementById("lastUpdated").textContent = msg || "Add a team to start tracking.";
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    }
+
+    function loadTeamsFromStorage() {
+      const params = new URLSearchParams(window.location.search);
+      let saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]");
+
+      if (params.get("owner") === "1" && !saved.some(t => t.id === "primary")) {
+        saved.unshift({
+          id: "primary",
+          name: "My Team",
+          sport: "ffl",
+          leagueId: "",
+          teamId: 1,
+          csvFile: "win_prob_log.csv"
+        });
+        localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      }
+
+      if (params.get("league") && params.get("team")) {
+        const sport = params.get("sport") || "ffl";
+        const leagueId = params.get("league");
+        const teamId = Number(params.get("team"));
+        const name = params.get("name") || `Team #${teamId}`;
+        const sharedId = `${sport}_${leagueId}_${teamId}`;
+        if (!saved.some(t => t.id === sharedId)) {
+          saved.push({
+            id: sharedId,
+            name,
+            sport,
+            leagueId,
+            teamId,
+            csvFile: `logs/${sharedId}.csv`
+          });
+          localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+        }
+        localStorage.setItem("mp_active_team", sharedId);
+      }
+
+      teams = saved;
+      const lastId = localStorage.getItem("mp_active_team");
+      activeTeam = teams.find(t => t.id === lastId) || teams[0] || null;
+      renderTeamDropdown();
+    }
+
+    function renderTeamDropdown() {
+      const sel = document.getElementById("teamSelect");
+      if (!activeTeam) {
+        document.getElementById("activeTeamName").textContent = "Matchup Pulse";
+        document.getElementById("myLabel").textContent = "My Team";
+        sel.style.display = "none";
+        clearDisplay("Tap + Team in the top right to add your ESPN league.");
+        openModal();
+        return;
+      }
+
+      sel.style.display = "inline-block";
+      document.getElementById("activeTeamName").textContent = activeTeam.name;
+      document.getElementById("myLabel").textContent = activeTeam.name;
+      document.getElementById("sportLabel").textContent = SPORT_LABELS[activeTeam.sport] || "🏆 Fantasy";
+
+      sel.innerHTML = teams.map(t =>
+        `<option value="${t.id}" ${t.id === activeTeam.id ? "selected" : ""}>${t.name} (${t.sport.toUpperCase()})</option>`
+      ).join("");
+      sel.onchange = () => {
+        activeTeam = teams.find(t => t.id === sel.value) || teams[0];
+        localStorage.setItem("mp_active_team", activeTeam.id);
+        renderTeamDropdown();
+        loadActiveTeamData();
+      };
+    }
+
+    async function loadActiveTeamData() {
+      if (!activeTeam) return;
+      allRows = [];
+      clearDisplay(`Fetching ${activeTeam.name}...`);
+
+      const csvPath = activeTeam.csvFile || `logs/${activeTeam.sport}_${activeTeam.leagueId}_${activeTeam.teamId}.csv`;
+      try {
+        const res = await fetch(`${REPO_RAW}/${csvPath}?t=${Date.now()}`);
+        if (res.ok) {
+          const text = await res.text();
+          const lines = text.trim().split("\n").slice(1);
+          allRows = lines.map(line => {
+            const [timestamp, week, my_live, opp_live, my_proj, opp_proj, win_pct] = line.split(",");
+            return { timestamp, week: Number(week), my_live: Number(my_live), opp_live: Number(opp_live), my_proj: Number(my_proj), opp_proj: Number(opp_proj), win_pct: Number(win_pct) };
+          }).filter(r => !isNaN(r.week));
+        }
+      } catch (e) {}
+
+      if (allRows.length === 0 && activeTeam.leagueId) {
+        await fetchLiveEspnSnapshot(activeTeam);
+      }
+
+      const weeks = [...new Set(allRows.map(r => r.week))].sort((a, b) => b - a);
+      const wSel = document.getElementById("weekSelect");
+      if (weeks.length > 0) {
+        wSel.style.display = "inline-block";
+        wSel.innerHTML = weeks.map(w => `<option value="${w}">Wk ${w}</option>`).join("");
+        wSel.onchange = () => renderWeek(Number(wSel.value));
+        renderWeek(weeks[0]);
+      } else {
+        clearDisplay(`No live data found for League #${activeTeam.leagueId} (Team #${activeTeam.teamId}). Make sure the ESPN league is set to Public.`);
+      }
+    }
+
+    async function fetchLiveEspnSnapshot(team) {
+      try {
+        const season = getCurrentSeason(team.sport);
+        const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${team.sport}/seasons/${season}/segments/0/leagues/${team.leagueId}?view=mMatchupScore&view=mScoreboard`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const wk = data.scoringPeriodId;
+        for (const m of (data.schedule || [])) {
+          if (m.matchupPeriodId !== wk) continue;
+          const h = m.home || {}, a = m.away || {};
+          if (h.teamId !== Number(team.teamId) && a.teamId !== Number(team.teamId)) continue;
+          const me = h.teamId === Number(team.teamId) ? h : a;
+          const opp = me === h ? a : h;
+          const myLive = me.totalPointsLive ?? me.totalPoints ?? 0;
+          const oppLive = opp.totalPointsLive ?? opp.totalPoints ?? 0;
+          const myProj = me.totalProjectedPointsLive ?? myLive;
+          const oppProj = opp.totalProjectedPointsLive ?? oppLive;
+          const wp = me.winProbability != null ? (me.winProbability <= 1 ? me.winProbability * 100 : me.winProbability) : 50;
+          allRows.push({ timestamp: "Live Now", week: wk, my_live: myLive, opp_live: oppLive, my_proj: myProj, opp_proj: oppProj, win_pct: Number(wp.toFixed(1)) });
+          break;
+        }
+      } catch (e) {}
+    }
+
+    function renderWeek(weekNum) {
+      const rows = allRows.filter(r => r.week === weekNum);
+      if (!rows.length) return;
+
+      const latest = rows[rows.length - 1];
+      const prev = rows.length > 1 ? rows[rows.length - 2] : latest;
+      const diff = latest.win_pct - prev.win_pct;
+
+      const heroEl = document.getElementById("heroProb");
+      heroEl.textContent = latest.win_pct.toFixed(1) + "%";
+      heroEl.style.color = latest.win_pct >= 50 ? "#34d399" : "#fb7185";
+
+      const badge = document.getElementById("deltaBadge");
+      if (diff > 0.05) { badge.className = "delta-badge delta-up"; badge.textContent = `▲ +${diff.toFixed(1)}%`; }
+      else if (diff < -0.05) { badge.className = "delta-badge delta-down"; badge.textContent = `▼ ${diff.toFixed(1)}%`; }
+      else { badge.className = "delta-badge delta-flat"; badge.textContent = "— 0.0%"; }
+
+      document.getElementById("myScore").textContent = latest.my_live.toFixed(2);
+      document.getElementById("oppScore").textContent = latest.opp_live.toFixed(2);
+      document.getElementById("myProj").textContent = `Proj: ${latest.my_proj.toFixed(1)}`;
+      document.getElementById("oppProj").textContent = `Proj: ${latest.opp_proj.toFixed(1)}`;
+      document.getElementById("probBar").style.width = `${Math.min(100, Math.max(0, latest.win_pct))}%`;
+
+      const probs = rows.map(r => r.win_pct);
+      document.getElementById("peakProb").textContent = Math.max(...probs).toFixed(1) + "%";
+      document.getElementById("lowProb").textContent = Math.min(...probs).toFixed(1) + "%";
+
+      const margin = latest.my_proj - latest.opp_proj;
+      const marginEl = document.getElementById("projMargin");
+      marginEl.textContent = (margin >= 0 ? "+" : "") + margin.toFixed(1);
+      marginEl.style.color = margin >= 0 ? "#34d399" : "#fb7185";
+
+      document.getElementById("stepCount").textContent = `t = 1 to ${rows.length}`;
+      document.getElementById("lastUpdated").textContent = `Updated ${latest.timestamp}`;
+
+      if (chartInstance) chartInstance.destroy();
+      const ctx = document.getElementById("winChart").getContext("2d");
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: rows.map((_, i) => i + 1),
+          datasets: [{
+            data: probs, borderWidth: 3, tension: 0.3,
+            pointRadius: rows.length > 35 ? 1.5 : 3.5, pointHoverRadius: 6, pointBackgroundColor: "#f8fafc",
+            segment: {
+              borderColor: c => (c.p0.parsed.y >= 50 && c.p1.parsed.y >= 50) ? "#10b981" :
+                                (c.p0.parsed.y < 50 && c.p1.parsed.y < 50) ? "#f43f5e" : "#38bdf8"
+            },
+            fill: { target: { value: 50 }, above: "rgba(16, 185, 129, 0.16)", below: "rgba(244, 63, 94, 0.16)" }
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "#1e293b", titleColor: "#94a3b8", bodyColor: "#f8fafc",
+              borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, padding: 10, displayColors: false,
+              callbacks: {
+                title: items => `t = ${items[0].label} • ${rows[items[0].dataIndex].timestamp}`,
+                label: item => {
+                  const r = rows[item.dataIndex];
+                  return [`Win Prob: ${r.win_pct.toFixed(1)}%`, `Score: ${r.my_live.toFixed(1)} – ${r.opp_live.toFixed(1)}`];
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: "#64748b", maxTicksLimit: 8, font: { size: 11 } }, grid: { display: false } },
+            y: { min: 0, max: 100, ticks: { color: "#64748b", stepSize: 25, font: { size: 11 }, callback: v => v + "%" }, grid: { color: "rgba(148, 163, 184, 0.08)" } }
+          }
+        },
+        plugins: [fiftyLinePlugin]
+      });
+    }
+
+    function openModal() {
+      document.getElementById("teamModal").classList.add("open");
+      renderSavedList();
+    }
+    function closeModal() { document.getElementById("teamModal").classList.remove("open"); }
+
+    function renderSavedList() {
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]");
+      const list = document.getElementById("savedTeamsList");
+      if (!saved.length) { list.innerHTML = ""; return; }
+      list.innerHTML = saved.map(t => `
+        <div class="saved-item">
+          <span>${t.name} (${t.sport.toUpperCase()} ${t.leagueId ? "• #" + t.leagueId : ""})</span>
+          <button class="del-link" onclick="deleteTeam('${t.id}')">Remove</button>
+        </div>
+      `).join("");
+    }
+
+    function saveNewTeam() {
+      const name = document.getElementById("inName").value.trim();
+      const sport = document.getElementById("inSport").value;
+      const leagueId = document.getElementById("inLeague").value.trim();
+      const teamId = Number(document.getElementById("inTeam").value);
+      if (!name || !leagueId || !teamId) return alert("Please fill in Team Name, League ID, and Team ID.");
+
+      const newTeam = {
+        id: `${sport}_${leagueId}_${teamId}`,
+        name, sport, leagueId, teamId,
+        csvFile: `logs/${sport}_${leagueId}_${teamId}.csv`
+      };
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]").filter(t => t.id !== newTeam.id);
+      saved.push(newTeam);
+      localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      localStorage.setItem("mp_active_team", newTeam.id);
+
+      document.getElementById("inName").value = "";
+      document.getElementById("inLeague").value = "";
+      document.getElementById("inTeam").value = "";
+      closeModal();
+      loadTeamsFromStorage();
+      loadActiveTeamData();
+    }
+
+    function deleteTeam(id) {
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]").filter(t => t.id !== id);
+      localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      if (localStorage.getItem("mp_active_team") === id) {
+        localStorage.removeItem("mp_active_team");
+      }
+      loadTeamsFromStorage();
+      renderSavedList();
+      loadActiveTeamData();
+    }
+
+    loadTeamsFromStorage();
+    loadActiveTeamData();
+  </script>
+</body>
+</html>
