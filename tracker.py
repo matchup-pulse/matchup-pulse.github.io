@@ -6,27 +6,42 @@ from datetime import datetime, timezone, timedelta
 import requests
 
 TEAMS_FILE = "teams.json"
-DEFAULT_SEASON = 2026
 
 SPORT_CONFIG = {
-    "ffl": {"name": "Football", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"},
-    "fba": {"name": "Basketball", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"},
-    "fhl": {"name": "Hockey", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"},
-    "flb": {"name": "Baseball", "scoreboard": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"},
+    "ffl": {"scoreboard": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"},
+    "fba": {"scoreboard": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"},
+    "fhl": {"scoreboard": "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"},
+    "flb": {"scoreboard": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"},
 }
 
-def sport_is_live(sport):
+def fallback_season(sport):
+    """Fallback season year if scoreboard API is unreachable."""
+    now = datetime.now(timezone.utc)
+    # NFL season starts in Aug/Sep and runs through Feb of the next year (uses start year)
+    if sport == "ffl":
+        return now.year if now.month >= 7 else now.year - 1
+    # NBA/NHL span two calendar years and ESPN indexes them by the ending year
+    if sport in ("fba", "fhl"):
+        return now.year + 1 if now.month >= 8 else now.year
+    return now.year
+
+def get_sport_status(sport):
+    """Returns (is_live, active_season_year) directly from ESPN's live scoreboard."""
     url = SPORT_CONFIG.get(sport, {}).get("scoreboard")
+    season = fallback_season(sport)
     if not url:
-        return True
+        return True, season
     try:
         sb = requests.get(url, timeout=15).json()
+        leagues = sb.get("leagues", [])
+        if leagues and leagues[0].get("season", {}).get("year"):
+            season = int(leagues[0]["season"]["year"])
         for event in sb.get("events", []):
             if event.get("status", {}).get("type", {}).get("state", "") == "in":
-                return True
+                return True, season
+        return False, season
     except Exception:
-        return True
-    return False
+        return True, season
 
 def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     my_rem = max(0.0, my_proj - my_live)
@@ -37,16 +52,22 @@ def estimate_win_prob(my_proj, opp_proj, my_live, opp_live):
     z_score = (my_proj - opp_proj) / combined_std
     return round(0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0))) * 100, 1)
 
-def poll_team(team, is_manual):
+def poll_team(team, is_manual, status_cache):
     sport = team.get("sport", "ffl")
     league_id = str(team.get("leagueId") or os.environ.get("LEAGUE_ID", ""))
     team_id = int(team.get("teamId") or os.environ.get("TEAM_ID", 1))
-    season_id = int(team.get("seasonId", DEFAULT_SEASON))
     csv_file = team.get("csvFile") or f"logs/{sport}_{league_id}_{team_id}.csv"
 
     if not league_id:
         return
 
+    if sport not in status_cache:
+        status_cache[sport] = get_sport_status(sport)
+    live_now, detected_season = status_cache[sport]
+    season_id = int(team.get("seasonId") or detected_season)
+
+    # Fast exit if no games are live in this sport (unless triggered manually)
+    # Still run one final pass if the last logged entry hasn't captured final post-game scores
     os.makedirs(os.path.dirname(csv_file) or ".", exist_ok=True)
     url = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/{sport}/seasons/{season_id}/segments/0/leagues/{league_id}"
     cookies = {}
@@ -81,7 +102,6 @@ def poll_team(team, is_manual):
         else:
             win_pct = estimate_win_prob(my_proj, opp_proj, my_live, opp_live)
 
-        live_now = sport_is_live(sport)
         already_logged_same = False
         if os.path.isfile(csv_file):
             with open(csv_file, "r") as f:
@@ -93,7 +113,8 @@ def poll_team(team, is_manual):
                         already_logged_same = True
 
         if not is_manual and not live_now and already_logged_same:
-            continue
+            print(f"[{sport}] No live games and score unchanged for {team.get('name')}. Skipping.")
+            return
 
         now = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
         file_exists = os.path.isfile(csv_file)
@@ -113,8 +134,9 @@ def main():
     if not teams:
         teams = [{"id": "primary", "name": "My Team", "sport": "ffl", "csvFile": "win_prob_log.csv"}]
 
+    status_cache = {}
     for team in teams:
-        poll_team(team, is_manual)
+        poll_team(team, is_manual, status_cache)
 
 if __name__ == "__main__":
     main()
