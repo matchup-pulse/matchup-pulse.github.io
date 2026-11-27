@@ -8,7 +8,321 @@
   <title>Matchup Pulse • Multi-Sport Win% Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js">const REPO_RAW = "https://raw.githubusercontent.com/whi1201/espn-win-tracker/refs/heads/main";
+    const SPORT_LABELS = {
+      ffl: "🏈 Fantasy Football",
+      fba: "🏀 Fantasy Basketball",
+      fhl: "🏒 Fantasy Hockey",
+      flb: "⚾ Fantasy Baseball"
+    };
+    const SPORT_SEASON = { ffl: 2026, flb: 2026, fba: 2027, fhl: 2027 };
+
+    let teams = [];
+    let activeTeam = null;
+    let allRows = [];
+    let chartInstance = null;
+
+    const fiftyLinePlugin = {
+      id: 'fiftyLine',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+        const yPos = y.getPixelForValue(50);
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.moveTo(left, yPos);
+        ctx.lineTo(right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    function clearDisplay(msg) {
+      document.getElementById("heroProb").textContent = "--%";
+      document.getElementById("heroProb").style.color = "#f8fafc";
+      const badge = document.getElementById("deltaBadge");
+      badge.className = "delta-badge delta-flat";
+      badge.textContent = "--";
+      document.getElementById("myScore").textContent = "--";
+      document.getElementById("oppScore").textContent = "--";
+      document.getElementById("myProj").textContent = "Proj: --";
+      document.getElementById("oppProj").textContent = "Proj: --";
+      document.getElementById("probBar").style.width = "50%";
+      document.getElementById("peakProb").textContent = "--%";
+      document.getElementById("lowProb").textContent = "--%";
+      document.getElementById("projMargin").textContent = "--";
+      document.getElementById("projMargin").style.color = "#f8fafc";
+      document.getElementById("stepCount").textContent = "t = 0";
+      document.getElementById("weekSelect").style.display = "none";
+      document.getElementById("lastUpdated").textContent = msg || "Add a team to start tracking.";
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    }
+
+    function loadTeamsFromStorage() {
+      const params = new URLSearchParams(window.location.search);
+      let saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]");
+
+      // 1. If owner visits with ?owner=1 (or already saved primary), keep primary team
+      if (params.get("owner") === "1" && !saved.some(t => t.id === "primary")) {
+        saved.unshift({
+          id: "primary",
+          name: "My Team",
+          sport: "ffl",
+          leagueId: "",
+          teamId: 1,
+          csvFile: "win_prob_log.csv"
+        });
+        localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      }
+
+      // 2. If friend opens a custom share URL (?league=...&team=...&sport=ffl&name=...)
+      if (params.get("league") && params.get("team")) {
+        const sport = params.get("sport") || "ffl";
+        const leagueId = params.get("league");
+        const teamId = Number(params.get("team"));
+        const name = params.get("name") || `Team #${teamId}`;
+        const sharedId = `${sport}_${leagueId}_${teamId}`;
+        if (!saved.some(t => t.id === sharedId)) {
+          saved.push({
+            id: sharedId,
+            name,
+            sport,
+            leagueId,
+            teamId,
+            csvFile: `logs/${sharedId}.csv`
+          });
+          localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+        }
+        localStorage.setItem("mp_active_team", sharedId);
+      }
+
+      teams = saved;
+      const lastId = localStorage.getItem("mp_active_team");
+      activeTeam = teams.find(t => t.id === lastId) || teams[0] || null;
+      renderTeamDropdown();
+    }
+
+    function renderTeamDropdown() {
+      const sel = document.getElementById("teamSelect");
+      if (!activeTeam) {
+        document.getElementById("activeTeamName").textContent = "Matchup Pulse";
+        document.getElementById("myLabel").textContent = "My Team";
+        sel.style.display = "none";
+        clearDisplay("Tap + Team in the top right to add your ESPN league.");
+        openModal();
+        return;
+      }
+
+      sel.style.display = "inline-block";
+      document.getElementById("activeTeamName").textContent = activeTeam.name;
+      document.getElementById("myLabel").textContent = activeTeam.name;
+      document.getElementById("sportLabel").textContent = SPORT_LABELS[activeTeam.sport] || "🏆 Fantasy";
+
+      sel.innerHTML = teams.map(t =>
+        `<option value="${t.id}" ${t.id === activeTeam.id ? "selected" : ""}>${t.name} (${t.sport.toUpperCase()})</option>`
+      ).join("");
+      sel.onchange = () => {
+        activeTeam = teams.find(t => t.id === sel.value) || teams[0];
+        localStorage.setItem("mp_active_team", activeTeam.id);
+        renderTeamDropdown();
+        loadActiveTeamData();
+      };
+    }
+
+    async function loadActiveTeamData() {
+      if (!activeTeam) return;
+      allRows = [];
+      clearDisplay(`Fetching ${activeTeam.name}...`);
+
+      const csvPath = activeTeam.csvFile || `logs/${activeTeam.sport}_${activeTeam.leagueId}_${activeTeam.teamId}.csv`;
+      try {
+        const res = await fetch(`${REPO_RAW}/${csvPath}?t=${Date.now()}`);
+        if (res.ok) {
+          const text = await res.text();
+          const lines = text.trim().split("\n").slice(1);
+          allRows = lines.map(line => {
+            const [timestamp, week, my_live, opp_live, my_proj, opp_proj, win_pct] = line.split(",");
+            return { timestamp, week: Number(week), my_live: Number(my_live), opp_live: Number(opp_live), my_proj: Number(my_proj), opp_proj: Number(opp_proj), win_pct: Number(win_pct) };
+          }).filter(r => !isNaN(r.week));
+        }
+      } catch (e) {}
+
+      if (allRows.length === 0 && activeTeam.leagueId) {
+        await fetchLiveEspnSnapshot(activeTeam);
+      }
+
+      const weeks = [...new Set(allRows.map(r => r.week))].sort((a, b) => b - a);
+      const wSel = document.getElementById("weekSelect");
+      if (weeks.length > 0) {
+        wSel.style.display = "inline-block";
+        wSel.innerHTML = weeks.map(w => `<option value="${w}">Wk ${w}</option>`).join("");
+        wSel.onchange = () => renderWeek(Number(wSel.value));
+        renderWeek(weeks[0]);
+      } else {
+        clearDisplay(`No live data found for League #${activeTeam.leagueId} (Team #${activeTeam.teamId}). Make sure the ESPN league is set to Public.`);
+      }
+    }
+
+    async function fetchLiveEspnSnapshot(team) {
+      try {
+        const season = SPORT_SEASON[team.sport] || 2026;
+        const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${team.sport}/seasons/${season}/segments/0/leagues/${team.leagueId}?view=mMatchupScore&view=mScoreboard`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const wk = data.scoringPeriodId;
+        for (const m of (data.schedule || [])) {
+          if (m.matchupPeriodId !== wk) continue;
+          const h = m.home || {}, a = m.away || {};
+          if (h.teamId !== Number(team.teamId) && a.teamId !== Number(team.teamId)) continue;
+          const me = h.teamId === Number(team.teamId) ? h : a;
+          const opp = me === h ? a : h;
+          const myLive = me.totalPointsLive ?? me.totalPoints ?? 0;
+          const oppLive = opp.totalPointsLive ?? opp.totalPoints ?? 0;
+          const myProj = me.totalProjectedPointsLive ?? myLive;
+          const oppProj = opp.totalProjectedPointsLive ?? oppLive;
+          const wp = me.winProbability != null ? (me.winProbability <= 1 ? me.winProbability * 100 : me.winProbability) : 50;
+          allRows.push({ timestamp: "Live Now", week: wk, my_live: myLive, opp_live: oppLive, my_proj: myProj, opp_proj: oppProj, win_pct: Number(wp.toFixed(1)) });
+          break;
+        }
+      } catch (e) {}
+    }
+
+    function renderWeek(weekNum) {
+      const rows = allRows.filter(r => r.week === weekNum);
+      if (!rows.length) return;
+
+      const latest = rows[rows.length - 1];
+      const prev = rows.length > 1 ? rows[rows.length - 2] : latest;
+      const diff = latest.win_pct - prev.win_pct;
+
+      const heroEl = document.getElementById("heroProb");
+      heroEl.textContent = latest.win_pct.toFixed(1) + "%";
+      heroEl.style.color = latest.win_pct >= 50 ? "#34d399" : "#fb7185";
+
+      const badge = document.getElementById("deltaBadge");
+      if (diff > 0.05) { badge.className = "delta-badge delta-up"; badge.textContent = `▲ +${diff.toFixed(1)}%`; }
+      else if (diff < -0.05) { badge.className = "delta-badge delta-down"; badge.textContent = `▼ ${diff.toFixed(1)}%`; }
+      else { badge.className = "delta-badge delta-flat"; badge.textContent = "— 0.0%"; }
+
+      document.getElementById("myScore").textContent = latest.my_live.toFixed(2);
+      document.getElementById("oppScore").textContent = latest.opp_live.toFixed(2);
+      document.getElementById("myProj").textContent = `Proj: ${latest.my_proj.toFixed(1)}`;
+      document.getElementById("oppProj").textContent = `Proj: ${latest.opp_proj.toFixed(1)}`;
+      document.getElementById("probBar").style.width = `${Math.min(100, Math.max(0, latest.win_pct))}%`;
+
+      const probs = rows.map(r => r.win_pct);
+      document.getElementById("peakProb").textContent = Math.max(...probs).toFixed(1) + "%";
+      document.getElementById("lowProb").textContent = Math.min(...probs).toFixed(1) + "%";
+
+      const margin = latest.my_proj - latest.opp_proj;
+      const marginEl = document.getElementById("projMargin");
+      marginEl.textContent = (margin >= 0 ? "+" : "") + margin.toFixed(1);
+      marginEl.style.color = margin >= 0 ? "#34d399" : "#fb7185";
+
+      document.getElementById("stepCount").textContent = `t = 1 to ${rows.length}`;
+      document.getElementById("lastUpdated").textContent = `Updated ${latest.timestamp}`;
+
+      if (chartInstance) chartInstance.destroy();
+      const ctx = document.getElementById("winChart").getContext("2d");
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: rows.map((_, i) => i + 1),
+          datasets: [{
+            data: probs, borderWidth: 3, tension: 0.3,
+            pointRadius: rows.length > 35 ? 1.5 : 3.5, pointHoverRadius: 6, pointBackgroundColor: "#f8fafc",
+            segment: {
+              borderColor: c => (c.p0.parsed.y >= 50 && c.p1.parsed.y >= 50) ? "#10b981" :
+                                (c.p0.parsed.y < 50 && c.p1.parsed.y < 50) ? "#f43f5e" : "#38bdf8"
+            },
+            fill: { target: { value: 50 }, above: "rgba(16, 185, 129, 0.16)", below: "rgba(244, 63, 94, 0.16)" }
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "#1e293b", titleColor: "#94a3b8", bodyColor: "#f8fafc",
+              borderColor: "rgba(255,255,255,0.1)", borderWidth: 1, padding: 10, displayColors: false,
+              callbacks: {
+                title: items => `t = ${items[0].label} • ${rows[items[0].dataIndex].timestamp}`,
+                label: item => {
+                  const r = rows[item.dataIndex];
+                  return [`Win Prob: ${r.win_pct.toFixed(1)}%`, `Score: ${r.my_live.toFixed(1)} – ${r.opp_live.toFixed(1)}`];
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: "#64748b", maxTicksLimit: 8, font: { size: 11 } }, grid: { display: false } },
+            y: { min: 0, max: 100, ticks: { color: "#64748b", stepSize: 25, font: { size: 11 }, callback: v => v + "%" }, grid: { color: "rgba(148, 163, 184, 0.08)" } }
+          }
+        },
+        plugins: [fiftyLinePlugin]
+      });
+    }
+
+    function openModal() {
+      document.getElementById("teamModal").classList.add("open");
+      renderSavedList();
+    }
+    function closeModal() { document.getElementById("teamModal").classList.remove("open"); }
+
+    function renderSavedList() {
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]");
+      const list = document.getElementById("savedTeamsList");
+      if (!saved.length) { list.innerHTML = ""; return; }
+      list.innerHTML = saved.map(t => `
+        <div class="saved-item">
+          <span>${t.name} (${t.sport.toUpperCase()} ${t.leagueId ? "• #" + t.leagueId : ""})</span>
+          <button class="del-link" onclick="deleteTeam('${t.id}')">Remove</button>
+        </div>
+      `).join("");
+    }
+
+    function saveNewTeam() {
+      const name = document.getElementById("inName").value.trim();
+      const sport = document.getElementById("inSport").value;
+      const leagueId = document.getElementById("inLeague").value.trim();
+      const teamId = Number(document.getElementById("inTeam").value);
+      if (!name || !leagueId || !teamId) return alert("Please fill in Team Name, League ID, and Team ID.");
+
+      const newTeam = {
+        id: `${sport}_${leagueId}_${teamId}`,
+        name, sport, leagueId, teamId,
+        csvFile: `logs/${sport}_${leagueId}_${teamId}.csv`
+      };
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]").filter(t => t.id !== newTeam.id);
+      saved.push(newTeam);
+      localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      localStorage.setItem("mp_active_team", newTeam.id);
+
+      document.getElementById("inName").value = "";
+      document.getElementById("inLeague").value = "";
+      document.getElementById("inTeam").value = "";
+      closeModal();
+      loadTeamsFromStorage();
+      loadActiveTeamData();
+    }
+
+    function deleteTeam(id) {
+      const saved = JSON.parse(localStorage.getItem("mp_user_teams") || "[]").filter(t => t.id !== id);
+      localStorage.setItem("mp_user_teams", JSON.stringify(saved));
+      if (localStorage.getItem("mp_active_team") === id) {
+        localStorage.removeItem("mp_active_team");
+      }
+      loadTeamsFromStorage();
+      renderSavedList();
+      loadActiveTeamData();
+    }
+
+    loadTeamsFromStorage();
+    loadActiveTeamData();</script>
   <style>
     :root {
       --bg: #090d16;
